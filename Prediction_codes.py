@@ -44,7 +44,6 @@ def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonal
 
 
 results = fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonality)
-results = results[len(results["date"]) - number_of_step_ahead :]
 
 
 def SARIMA_predictor(data, number_of_step_ahead, seasonality):
