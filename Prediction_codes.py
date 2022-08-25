@@ -14,8 +14,11 @@ seasonality = True           #If user select seasonality this parameter would be
 weekly_seasonality = False   #If user select weakly seasonality this parameter would be True
 
 def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonality):
+
+    #Changing column's name to fbprophet format
     data.columns = ['ds', 'y']
 
+    #
     for i in range(0, len(data["ds"])):
         year = (datetime.today() - timedelta(days=i)).year
         month = (datetime.today() - timedelta(days=i)).month
@@ -29,17 +32,31 @@ def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonal
     m.fit(data)
     future = m.make_future_dataframe(periods=number_of_step_ahead)
     forecast = m.predict(future)
+    forecast["ds"] = [x for x in range(1, 1 + len(forecast["ds"]))]
+    forecast = forecast[["ds", "yhat"]]
+    forecast.columns = ["date", "prediction"]
 
-    return forecast[["ds","yhat"]]
+    return forecast
 
-def reverse_date_to_series(data):
-    data["ds"] = [x for x in range(1,1+len(data["ds"]))]
-    return data
+
 
 results = fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonality)
-results = results[len(results["ds"]) - number_of_step_ahead :]
-results = reverse_date_to_series(results)
+results = results[len(results["date"]) - number_of_step_ahead :]
 
 
+def SARIMA_predictor(data, number_of_step_ahead, seasonality):
+    arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
+                             start_Q=0, max_P=1,
+                             max_D=1, max_Q=1, m=12, seasonal=seasonality, error_action='ignore', trace=True,
+                             suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
 
+    arima_model.fit(data["value"])
+    future = arima_model.predict(n_periods = number_of_step_ahead)
+    forecast = pd.DataFrame(np.zeros((number_of_step_ahead,2)))
+    forecast[0] = [x + len(data["value"]) for x in range(1,1+number_of_step_ahead)]
+    forecast[1] = future
+    forecast.columns = ["date", "prediction"]
 
+    return forecast
+
+results = SARIMA_predictor(data, number_of_step_ahead, seasonality)
