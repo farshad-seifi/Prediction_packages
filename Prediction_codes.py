@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from fbprophet import Prophet
 from datetime import datetime, timedelta
 from pmdarima.arima import auto_arima
+from darts import TimeSeries
+from darts.models import ExponentialSmoothing
 
 
 data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\test_data.xlsx")
@@ -35,6 +37,7 @@ def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonal
     forecast["ds"] = [x for x in range(1, 1 + len(forecast["ds"]))]
     forecast = forecast[["ds", "yhat"]]
     forecast.columns = ["date", "prediction"]
+    forecast = forecast[len(forecast["date"]) - number_of_step_ahead:]
 
     return forecast
 
@@ -60,3 +63,18 @@ def SARIMA_predictor(data, number_of_step_ahead, seasonality):
     return forecast
 
 results = SARIMA_predictor(data, number_of_step_ahead, seasonality)
+
+def ExponentialSmoothing_predictor(data, number_of_step_ahead):
+
+    series = TimeSeries.from_dataframe(data, 'date', 'value')
+    model = ExponentialSmoothing()
+    model.fit(series)
+    prediction = model.predict(number_of_step_ahead, num_samples=1)
+    forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 2)))
+    forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
+    forecast[1] = pd.DataFrame(prediction.values())
+    forecast.columns = ["date", "prediction"]
+
+    return forecast
+
+results = ExponentialSmoothing_predictor(data, number_of_step_ahead)
