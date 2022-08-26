@@ -16,10 +16,10 @@ from darts.utils.timeseries_generation import datetime_attribute_timeseries
 data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\test_data.xlsx")
 
 number_of_step_ahead = 30    #Number of periods that user want to predict
-seasonality = True           #If user select seasonality this parameter would be True
-weekly_seasonality = False   #If user select weakly seasonality this parameter would be True
-frequency = "Monthly"
-RNN_Type = "LSTM"
+seasonality = True           #If user selects fbprophet as a main model and then selects seasonality this parameter would be True
+weekly_seasonality = False   #If user selects fbprophet as a main model and then selects weakly seasonality this parameter would be True
+frequency = "Monthly"        #Data level of prediction -- Allowed values : Monthly & Daily
+RNN_Type = "LSTM"            #If user selects RNN-Based model as a main model, he would select Model type between RNN, LSTM, and GRU 
 
 def monthdelta(date, delta):
     m, y = (date.month+delta) % 12, date.year + ((date.month)+delta-1) // 12
