@@ -9,12 +9,26 @@ from darts import TimeSeries
 from darts.models import ExponentialSmoothing
 from darts.models import NBEATSModel
 from darts.dataprocessing.transformers import Scaler, MissingValuesFiller
+from darts.models import RNNModel, BlockRNNModel
+from darts.utils.timeseries_generation import datetime_attribute_timeseries
+
 
 data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\test_data.xlsx")
 
 number_of_step_ahead = 30    #Number of periods that user want to predict
 seasonality = True           #If user select seasonality this parameter would be True
 weekly_seasonality = False   #If user select weakly seasonality this parameter would be True
+frequency = "Monthly"
+RNN_Type = "LSTM"
+
+def monthdelta(date, delta):
+    m, y = (date.month+delta) % 12, date.year + ((date.month)+delta-1) // 12
+    if not m: m = 12
+    d = min(date.day, [31,
+            29 if y%4==0 and (not y%100==0 or y%400 == 0) else 28,
+            31,30,31,30,31,31,30,31,30,31][m-1])
+
+    return date.replace(day=d,month=m, year=y)
 
 def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonality):
 
@@ -41,7 +55,6 @@ def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonal
     forecast = forecast[len(forecast["date"]) - number_of_step_ahead:]
 
     return forecast
-
 
 
 results = fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonality)
@@ -106,3 +119,79 @@ def NBEATSModel_predictor(data, number_of_step_ahead):
 
 results = NBEATSModel_predictor(data, number_of_step_ahead)
 
+
+def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency):
+
+    for i in range(0, len(data["date"])):
+        if(frequency == "Monthly"):
+            year = (monthdelta(datetime.today(), -i)).year
+            month = (monthdelta(datetime.today(), -i)).month
+            day = (monthdelta(datetime.today(), -i)).day
+            data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month)
+        elif(frequency == "Daily"):
+            year = (datetime.today() - timedelta(days=i)).year
+            month = (datetime.today() - timedelta(days=i)).month
+            day = (datetime.today() - timedelta(days=i)).day
+            data["date"].iloc[len(data["date"])-i-1] = str(year) + "-" + str(month) + "-" + str(day)
+
+    series = TimeSeries.from_dataframe(data, 'date', 'value').astype(np.float32)
+    transformer = Scaler()
+    series = transformer.fit_transform(series)
+
+    date = pd.DataFrame(np.zeros((len(data["date"])+number_of_step_ahead, 1)))
+
+    for i in range(0, len(data["date"])+number_of_step_ahead):
+        if(frequency == "Monthly"):
+            year = (monthdelta(datetime.today(), number_of_step_ahead-i)).year
+            month = (monthdelta(datetime.today(), number_of_step_ahead-i)).month
+            day = (monthdelta(datetime.today(), number_of_step_ahead-i)).day
+            date[0].iloc[len(date[0]) - i - 1] = str(year) + "-" + str(month)
+
+        elif(frequency == "Daily"):
+            year = (datetime.today() - timedelta(days=-number_of_step_ahead+i)).year
+            month = (datetime.today() - timedelta(days=-number_of_step_ahead+i)).month
+            day = (datetime.today() - timedelta(days=-number_of_step_ahead+i)).day
+            data["date"].iloc[len(data["date"])-i-1] = str(year) + "-" + str(month) + "-" + str(day)
+            date[0].iloc[len(date[0]) - i - 1] = str(year) + "-" + str(month) + "-" + str(day)
+
+
+    date.columns = ["date"]
+    date["value"] = 0
+    series_date = TimeSeries.from_dataframe(date, 'date', 'value').astype(np.float32)
+
+    year_data = datetime_attribute_timeseries(series_date, attribute="year")
+    year_series = Scaler().fit_transform(year_data)
+    month_series = datetime_attribute_timeseries(
+                    year_series, attribute="month", one_hot=True)
+
+    covariates = year_series.stack(month_series)
+
+
+    my_model = RNNModel(
+                    model= RNN_Type,
+                    hidden_dim=20,
+                    dropout=0,
+                    batch_size=16,
+                    n_epochs=100,
+                    optimizer_kwargs={"lr": 1e-3},
+                    model_name="data_RNN",
+                    log_tensorboard=True,
+                    random_state=42,
+                    training_length=20,
+                    input_chunk_length=14,
+                    force_reset=True,
+                    save_checkpoints=True)
+
+    my_model.fit(
+             series,
+             future_covariates=covariates.astype(np.float32))
+
+    prediction = my_model.predict(number_of_step_ahead)
+    forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 2)))
+    forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
+    forecast[1] = pd.DataFrame(transformer.inverse_transform(prediction).values())
+    forecast.columns = ["date", "prediction"]
+
+    return forecast
+
+results = RNNModel_predictor(data, number_of_step_ahead, RNN_Type, frequency)
