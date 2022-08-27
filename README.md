@@ -1,14 +1,16 @@
 # Prediction_packages
-Some of resuts are as follows:
-Model				                MAPE
-1)Fbprophet    			        0.06275598802438011\n
-2)SARIMA      			        0.05005012746881791
-3)Exponential Smothing    	0.0503351571968867
-4)NBEATS   			            0.030419272084320315
-5)LSTM   		              	0.05253476709983007
-6)RNN    			              0.05292076686295016
-7)GRU   			              0.04512675989713833
-8)DeepTCN   			          0.05432180354488332
+Some of results are as follows: 
+|     Model     |      MAPE     |
+| ------------- | ------------- |
+|   Fbprophet   |    0.06275    |
+|    SARIMA     |    0.05005    |
+| Exp. Smothing |    0.05033    |
+|    NBEATS     |    0.03041    |
+|     LSTM      |    0.05253    |
+|     RNN       |    0.05292    |
+|     GRU       |    0.04512    |
+|    DeepTCN    |    0.05432    |
+
 
 ![Nbeats](https://user-images.githubusercontent.com/32601295/187025135-358339de-d78e-4147-837a-926b7d073173.png)
 ![LSTM](https://user-images.githubusercontent.com/32601295/187025206-9a65f783-c4e6-407b-bfe3-65d78b552c0a.png)
