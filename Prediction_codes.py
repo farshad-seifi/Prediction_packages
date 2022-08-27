@@ -11,7 +11,8 @@ from darts.models import NBEATSModel
 from darts.dataprocessing.transformers import Scaler, MissingValuesFiller
 from darts.models import RNNModel, BlockRNNModel
 from darts.utils.timeseries_generation import datetime_attribute_timeseries
-
+from darts.utils.likelihood_models import GaussianLikelihood
+from darts.models import TCNModel
 
 data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\test_data.xlsx")
 
@@ -19,7 +20,7 @@ number_of_step_ahead = 30    #Number of periods that user want to predict
 seasonality = True           #If user selects fbprophet as a main model and then selects seasonality this parameter would be True
 weekly_seasonality = False   #If user selects fbprophet as a main model and then selects weakly seasonality this parameter would be True
 frequency = "Monthly"        #Data level of prediction -- Allowed values : Monthly & Daily
-RNN_Type = "LSTM"            #If user selects RNN-Based model as a main model, he would select Model type between RNN, LSTM, and GRU 
+RNN_Type = "LSTM"            #If user selects RNN-Based model as a main model, he could select Model type between RNN, LSTM, and GRU
 
 def monthdelta(date, delta):
     m, y = (date.month+delta) % 12, date.year + ((date.month)+delta-1) // 12
@@ -195,3 +196,71 @@ def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency):
     return forecast
 
 results = RNNModel_predictor(data, number_of_step_ahead, RNN_Type, frequency)
+
+
+def DeepTCN_predictor(data, number_of_step_ahead, frequency):
+
+    for i in range(0, len(data["date"])):
+        if (frequency == "Monthly"):
+            year = (monthdelta(datetime.today(), -i)).year
+            month = (monthdelta(datetime.today(), -i)).month
+            day = (monthdelta(datetime.today(), -i)).day
+            data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month)
+        elif (frequency == "Daily"):
+            year = (datetime.today() - timedelta(days=i)).year
+            month = (datetime.today() - timedelta(days=i)).month
+            day = (datetime.today() - timedelta(days=i)).day
+            data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month) + "-" + str(day)
+
+    series = TimeSeries.from_dataframe(data, 'date', 'value').astype(np.float32)
+    transformer = Scaler()
+    series = transformer.fit_transform(series)
+
+    date = pd.DataFrame(np.zeros((len(data["date"]) + number_of_step_ahead, 1)))
+
+    for i in range(0, len(data["date"]) + number_of_step_ahead):
+        if (frequency == "Monthly"):
+            year = (monthdelta(datetime.today(), number_of_step_ahead - i)).year
+            month = (monthdelta(datetime.today(), number_of_step_ahead - i)).month
+            day = (monthdelta(datetime.today(), number_of_step_ahead - i)).day
+            date[0].iloc[len(date[0]) - i - 1] = str(year) + "-" + str(month)
+
+        elif (frequency == "Daily"):
+            year = (datetime.today() - timedelta(days=-number_of_step_ahead + i)).year
+            month = (datetime.today() - timedelta(days=-number_of_step_ahead + i)).month
+            day = (datetime.today() - timedelta(days=-number_of_step_ahead + i)).day
+            data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month) + "-" + str(day)
+            date[0].iloc[len(date[0]) - i - 1] = str(year) + "-" + str(month) + "-" + str(day)
+
+    date.columns = ["date"]
+    date["value"] = 0
+    series_date = TimeSeries.from_dataframe(date, 'date', 'value').astype(np.float32)
+
+    year_data = datetime_attribute_timeseries(series_date, attribute="year")
+    year_series = Scaler().fit_transform(year_data)
+    month_series = datetime_attribute_timeseries(
+        year_series, attribute="month", one_hot=True)
+
+    covariates = year_series.stack(month_series)
+
+    deeptcn = TCNModel(
+        input_chunk_length=30,
+        output_chunk_length=20,
+        kernel_size=2,
+        num_filters=4,
+        dilation_base=2,
+        dropout=0,
+        random_state=0,
+        likelihood=GaussianLikelihood())
+
+    deeptcn.fit(series, past_covariates=covariates.astype(np.float32))
+
+    prediction = deeptcn.predict(number_of_step_ahead)
+    forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 2)))
+    forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
+    forecast[1] = pd.DataFrame(transformer.inverse_transform(prediction).values())
+    forecast.columns = ["date", "prediction"]
+
+    return forecast
+
+results = DeepTCN_predictor(data, number_of_step_ahead, frequency)
