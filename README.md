@@ -1,7 +1,7 @@
 # Prediction_packages
 Some of resuts are as follows:
 Model				                MAPE
-1)Fbprophet    			        0.06275598802438011
+1)Fbprophet    			        0.06275598802438011\n
 2)SARIMA      			        0.05005012746881791
 3)Exponential Smothing    	0.0503351571968867
 4)NBEATS   			            0.030419272084320315
