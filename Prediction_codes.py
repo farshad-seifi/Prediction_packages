@@ -78,8 +78,12 @@ def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonal
     return forecast
 
 
-
 def SARIMA_predictor(data, number_of_step_ahead, seasonality):
+    #The main function for SARIMA prediction
+
+    #Creating model object. by this block engine search till SARIMA(2,2,2)(1,1,1)
+    #and selects the best value for (p,d,q)(P,D,Q) between these values.
+    #changing the range of this hyperparameter may produce better results but reduce the speed of fitting.
     arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
                              start_Q=0, max_P=1,
                              max_D=1, max_Q=1, m=12, seasonal=seasonality, error_action='ignore', trace=True,
@@ -87,6 +91,8 @@ def SARIMA_predictor(data, number_of_step_ahead, seasonality):
 
     arima_model.fit(data["value"])
     future = arima_model.predict(n_periods = number_of_step_ahead)
+
+    #Creating final alignment for forecasting
     forecast = pd.DataFrame(np.zeros((number_of_step_ahead,2)))
     forecast[0] = [x + len(data["value"]) for x in range(1,1+number_of_step_ahead)]
     forecast[1] = future
@@ -94,16 +100,18 @@ def SARIMA_predictor(data, number_of_step_ahead, seasonality):
 
     return forecast
 
-results = SARIMA_predictor(train_data, number_of_step_ahead, seasonality)
-
-
 
 def ExponentialSmoothing_predictor(data, number_of_step_ahead):
+    #The main function for ExponentialSmoothing prediction
 
+    #Converting dataframe format to timeseries for using darts package
     series = TimeSeries.from_dataframe(data, 'date', 'value')
+    #Creating model object
     model = ExponentialSmoothing()
     model.fit(series)
     prediction = model.predict(number_of_step_ahead, num_samples=1)
+
+    #Creating final alignment for forecasting
     forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 2)))
     forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
     forecast[1] = pd.DataFrame(prediction.values())
@@ -111,12 +119,16 @@ def ExponentialSmoothing_predictor(data, number_of_step_ahead):
 
     return forecast
 
-results = ExponentialSmoothing_predictor(train_data, number_of_step_ahead)
 
 
 def NBEATSModel_predictor(data, number_of_step_ahead):
+    #The main function for NBEATS prediction
+
+    #Converting dataframe format to timeseries for using darts package
     series = TimeSeries.from_dataframe(data, 'date', 'value').astype(np.float32)
 
+    #Creating model object
+    #Hyperparameters should be optimized.
     model_nbeats = NBEATSModel(input_chunk_length=30,
                                output_chunk_length=7,
                                generic_architecture=True,
@@ -131,6 +143,8 @@ def NBEATSModel_predictor(data, number_of_step_ahead):
 
     model_nbeats.fit(series)
     prediction = model_nbeats.predict(number_of_step_ahead)
+
+    #Creating final alignment for forecasting
     forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 2)))
     forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
     forecast[1] = pd.DataFrame(prediction.values())
@@ -138,12 +152,11 @@ def NBEATSModel_predictor(data, number_of_step_ahead):
 
     return forecast
 
-results = NBEATSModel_predictor(train_data, number_of_step_ahead)
 
+def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency, seasonality):
+    #The main function for RNN prediction
 
-
-def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency):
-
+    #Creating the well fitted formated based on the type of frequency
     for i in range(0, len(data["date"])):
         if(frequency == "Monthly"):
             year = (monthdelta(datetime.today(), -i)).year
@@ -156,10 +169,13 @@ def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency):
             day = (datetime.today() - timedelta(days=i)).day
             data["date"].iloc[len(data["date"])-i-1] = str(year) + "-" + str(month) + "-" + str(day)
 
+    #Converting dataframe format to timeseries for using darts package
+    #Then scaling the value to Z form for getting better prediction
     series = TimeSeries.from_dataframe(data, 'date', 'value').astype(np.float32)
     transformer = Scaler()
     series = transformer.fit_transform(series)
 
+    #Handling dates format of darts
     date = pd.DataFrame(np.zeros((len(data["date"])+number_of_step_ahead, 1)))
 
     for i in range(0, len(data["date"])+number_of_step_ahead):
@@ -181,14 +197,17 @@ def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency):
     date["value"] = 0
     series_date = TimeSeries.from_dataframe(date, 'date', 'value').astype(np.float32)
 
-    year_data = datetime_attribute_timeseries(series_date, attribute="year")
-    year_series = Scaler().fit_transform(year_data)
-    month_series = datetime_attribute_timeseries(
-                    year_series, attribute="month", one_hot=True)
 
-    covariates = year_series.stack(month_series)
+    #Adding monthly seasonality to data
+    #We should add weekly too
+    if(seasonality):
+        year_data = datetime_attribute_timeseries(series_date, attribute="year")
+        year_series = Scaler().fit_transform(year_data)
+        month_series = datetime_attribute_timeseries(year_series, attribute="month", one_hot=True)
 
+        covariates = year_series.stack(month_series)
 
+    #Creating model object
     my_model = RNNModel(
                     model= RNN_Type,
                     hidden_dim=20,
@@ -204,9 +223,12 @@ def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency):
                     force_reset=True,
                     save_checkpoints=True)
 
-    my_model.fit(
-             series,
-             future_covariates=covariates.astype(np.float32))
+    if(seasonality):
+        my_model.fit(series,future_covariates=covariates.astype(np.float32))
+    else:
+        my_model.fit(series)
+
+    #Creating final alignment for forecasting
 
     prediction = my_model.predict(number_of_step_ahead)
     forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 2)))
@@ -215,8 +237,6 @@ def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency):
     forecast.columns = ["date", "prediction"]
 
     return forecast
-
-results = RNNModel_predictor(train_data, number_of_step_ahead, RNN_Type, frequency)
 
 
 def DeepTCN_predictor(data, number_of_step_ahead, frequency):
@@ -305,6 +325,9 @@ def Accuracy_metric_calculator(test_data, results, Metric_name):
     return  Metric_value
 
 results = fbprophet_predictor(train_data, number_of_step_ahead, seasonality, weekly_seasonality)
+results = SARIMA_predictor(train_data, number_of_step_ahead, seasonality)
+results = ExponentialSmoothing_predictor(train_data, number_of_step_ahead)
+results = NBEATSModel_predictor(train_data, number_of_step_ahead)
+results = RNNModel_predictor(train_data, number_of_step_ahead, RNN_Type, frequency, seasonality)
 
 Acc = Accuracy_metric_calculator(test_data, results, Metric_name)
-
