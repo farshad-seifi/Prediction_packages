@@ -16,13 +16,27 @@ from darts.models import TCNModel
 
 data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\test_data.xlsx")
 
+## Models parameters that give from user
 number_of_step_ahead = 30    #Number of periods that user want to predict
 seasonality = True           #If user selects fbprophet as a main model and then selects seasonality this parameter would be True
 weekly_seasonality = False   #If user selects fbprophet as a main model and then selects weakly seasonality this parameter would be True
 frequency = "Monthly"        #Data level of prediction -- Allowed values : Monthly & Daily
 RNN_Type = "LSTM"            #If user selects RNN-Based model as a main model, he could select Model type between RNN, LSTM, and GRU
+Direction = "postdict"       #If user selects postdict model removes number of selected step from data and then predict without them.
+                             #After that user can see the accuarcy of prediction. Another choice for this variable is predict which doesn't have accuracy option.
+Metric_name = "MAPE"         #If user selects postdict for Direction parameter, he would select accuracy metric from a valid list.
+
+
+## Removing last #number_of_step_ahead from data if Direction be postdict
+if Direction == "postdict":
+    train_data = data.iloc[:len(data["date"])-number_of_step_ahead]
+    test_data = data.iloc[len(data["date"])-number_of_step_ahead:]
+else:
+    train_data = data
+
 
 def monthdelta(date, delta):
+    #This function calculates the difference between to date based on month
     m, y = (date.month+delta) % 12, date.year + ((date.month)+delta-1) // 12
     if not m: m = 12
     d = min(date.day, [31,
@@ -32,11 +46,13 @@ def monthdelta(date, delta):
     return date.replace(day=d,month=m, year=y)
 
 def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonality):
+    #The main function for Fbprophet prediction
 
     #Changing column's name to fbprophet format
     data.columns = ['ds', 'y']
 
-    #
+    #This loop creates desire date format ("YYYY-MM-DD") for fbprophet
+    #It should be noted that for any value of frequency (Monthly or daily), we should create this format.
     for i in range(0, len(data["ds"])):
         year = (datetime.today() - timedelta(days=i)).year
         month = (datetime.today() - timedelta(days=i)).month
@@ -44,12 +60,16 @@ def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonal
         data["ds"].iloc[len(data["ds"])-i-1] = str(year) + "-" + str(month) + "-" + str(day)
 
 
+    #Craeting model object. By selecting weekly_seasonality equals to True, the model add weekly seasonality
+    #In addition to that if the seasonality sets True, Monthly seasonlity adds to model.
     m = Prophet( weekly_seasonality=weekly_seasonality)
     if (seasonality):
         m.add_seasonality(name='monthly', period=12, fourier_order=5)
     m.fit(data)
     future = m.make_future_dataframe(periods=number_of_step_ahead)
     forecast = m.predict(future)
+
+    #Creating final alignment for forecasting
     forecast["ds"] = [x for x in range(1, 1 + len(forecast["ds"]))]
     forecast = forecast[["ds", "yhat"]]
     forecast.columns = ["date", "prediction"]
@@ -57,8 +77,6 @@ def fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonal
 
     return forecast
 
-
-results = fbprophet_predictor(data, number_of_step_ahead, seasonality, weekly_seasonality)
 
 
 def SARIMA_predictor(data, number_of_step_ahead, seasonality):
@@ -76,7 +94,9 @@ def SARIMA_predictor(data, number_of_step_ahead, seasonality):
 
     return forecast
 
-results = SARIMA_predictor(data, number_of_step_ahead, seasonality)
+results = SARIMA_predictor(train_data, number_of_step_ahead, seasonality)
+
+
 
 def ExponentialSmoothing_predictor(data, number_of_step_ahead):
 
@@ -91,7 +111,7 @@ def ExponentialSmoothing_predictor(data, number_of_step_ahead):
 
     return forecast
 
-results = ExponentialSmoothing_predictor(data, number_of_step_ahead)
+results = ExponentialSmoothing_predictor(train_data, number_of_step_ahead)
 
 
 def NBEATSModel_predictor(data, number_of_step_ahead):
@@ -118,7 +138,8 @@ def NBEATSModel_predictor(data, number_of_step_ahead):
 
     return forecast
 
-results = NBEATSModel_predictor(data, number_of_step_ahead)
+results = NBEATSModel_predictor(train_data, number_of_step_ahead)
+
 
 
 def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency):
@@ -195,7 +216,7 @@ def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency):
 
     return forecast
 
-results = RNNModel_predictor(data, number_of_step_ahead, RNN_Type, frequency)
+results = RNNModel_predictor(train_data, number_of_step_ahead, RNN_Type, frequency)
 
 
 def DeepTCN_predictor(data, number_of_step_ahead, frequency):
@@ -263,4 +284,27 @@ def DeepTCN_predictor(data, number_of_step_ahead, frequency):
 
     return forecast
 
-results = DeepTCN_predictor(data, number_of_step_ahead, frequency)
+results = DeepTCN_predictor(train_data, number_of_step_ahead, frequency)
+
+def Accuracy_metric_calculator(test_data, results, Metric_name):
+
+    test_data = test_data.reset_index(drop=True)
+    results = results.reset_index(drop=True)
+
+    if (Metric_name == "MAPE"):
+        Metric_value = 100 * np.abs((results["prediction"] - test_data["value"]) / (test_data["value"])).mean()
+    elif (Metric_name == "MSE"):
+        Metric_value = ((results["prediction"] - test_data["value"])**2).mean()
+    elif (Metric_name == "MAE"):
+        Metric_value = (np.abs(results["prediction"] - test_data["value"])).mean()
+    elif (Metric_name == "RMSE"):
+        Metric_value = np.sqrt(((results["prediction"] - test_data["value"])**2).mean())
+    elif (Metric_name == "SMAPE"):
+        Metric_value = 100 * (np.abs(results["prediction"] - test_data["value"])/(np.abs(results["prediction"]) + np.abs(test_data["value"]))).mean()
+
+    return  Metric_value
+
+results = fbprophet_predictor(train_data, number_of_step_ahead, seasonality, weekly_seasonality)
+
+Acc = Accuracy_metric_calculator(test_data, results, Metric_name)
+
