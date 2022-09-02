@@ -239,8 +239,10 @@ def RNNModel_predictor(data, number_of_step_ahead,RNN_Type, frequency, seasonali
     return forecast
 
 
-def DeepTCN_predictor(data, number_of_step_ahead, frequency):
+def DeepTCN_predictor(data, number_of_step_ahead, frequency, seasonality):
+    #The main function for DeepTCN prediction
 
+    #Handling dates format of darts
     for i in range(0, len(data["date"])):
         if (frequency == "Monthly"):
             year = (monthdelta(datetime.today(), -i)).year
@@ -277,12 +279,14 @@ def DeepTCN_predictor(data, number_of_step_ahead, frequency):
     date["value"] = 0
     series_date = TimeSeries.from_dataframe(date, 'date', 'value').astype(np.float32)
 
-    year_data = datetime_attribute_timeseries(series_date, attribute="year")
-    year_series = Scaler().fit_transform(year_data)
-    month_series = datetime_attribute_timeseries(
-        year_series, attribute="month", one_hot=True)
+    #Adding monthly seasonality to data
+    #We should add weekly too
+    if(seasonality):
+        year_data = datetime_attribute_timeseries(series_date, attribute="year")
+        year_series = Scaler().fit_transform(year_data)
+        month_series = datetime_attribute_timeseries(year_series, attribute="month", one_hot=True)
 
-    covariates = year_series.stack(month_series)
+        covariates = year_series.stack(month_series)
 
     deeptcn = TCNModel(
         input_chunk_length=30,
@@ -294,8 +298,12 @@ def DeepTCN_predictor(data, number_of_step_ahead, frequency):
         random_state=0,
         likelihood=GaussianLikelihood())
 
-    deeptcn.fit(series, past_covariates=covariates.astype(np.float32))
+    if(seasonality):
+        deeptcn.fit(series, past_covariates=covariates.astype(np.float32))
+    else:
+        deeptcn.fit(series)
 
+    #Creating final alignment for forecasting
     prediction = deeptcn.predict(number_of_step_ahead)
     forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 2)))
     forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
@@ -304,7 +312,6 @@ def DeepTCN_predictor(data, number_of_step_ahead, frequency):
 
     return forecast
 
-results = DeepTCN_predictor(train_data, number_of_step_ahead, frequency)
 
 def Accuracy_metric_calculator(test_data, results, Metric_name):
 
@@ -324,10 +331,13 @@ def Accuracy_metric_calculator(test_data, results, Metric_name):
 
     return  Metric_value
 
+# Test models
 results = fbprophet_predictor(train_data, number_of_step_ahead, seasonality, weekly_seasonality)
 results = SARIMA_predictor(train_data, number_of_step_ahead, seasonality)
 results = ExponentialSmoothing_predictor(train_data, number_of_step_ahead)
 results = NBEATSModel_predictor(train_data, number_of_step_ahead)
 results = RNNModel_predictor(train_data, number_of_step_ahead, RNN_Type, frequency, seasonality)
+results = DeepTCN_predictor(train_data, number_of_step_ahead, frequency,seasonality)
 
+#Calculate Accuracy metric
 Acc = Accuracy_metric_calculator(test_data, results, Metric_name)
