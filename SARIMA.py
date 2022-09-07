@@ -1,3 +1,5 @@
+import numpy as np
+import pandas as pd
 from pmdarima.arima import auto_arima
 
 data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\test_data.xlsx")
