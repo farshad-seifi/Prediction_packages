@@ -59,8 +59,8 @@ def ExponentialSmoothing_predictor(data, number_of_step_ahead, Monthly_seasonali
     forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
     forecast[1] = pd.DataFrame(prediction.values())
     if Confidence_limit:
-        forecast[2] = - 2.64 * pd.DataFrame(prediction_for_std)[0] + pd.DataFrame(forecast[1])[1]
-        forecast[3] = 2.64 * pd.DataFrame(prediction_for_std)[0] + pd.DataFrame(forecast[1])[1]
+        forecast[2] = - 1.96 * pd.DataFrame(prediction_for_std)[0] + pd.DataFrame(forecast[1])[1]
+        forecast[3] = 1.96 * pd.DataFrame(prediction_for_std)[0] + pd.DataFrame(forecast[1])[1]
 
     forecast.columns = ["date", "prediction", "LCL", "UCL"]
 
