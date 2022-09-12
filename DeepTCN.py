@@ -40,18 +40,19 @@ def monthdelta(date, delta):
 
 
 
-def NBEATSModel_predictor(data, number_of_step_ahead,Monthly_seasonality, Weekly_seasonality, frequency):
+def DeepTCN_predictor(data, number_of_step_ahead, Monthly_seasonality, Weekly_seasonality, frequency,Confidence_limit):
 
     """
-    The main function for NBEATS prediction
+    The main function for DeepTCN prediction
     :param data: The main data for prediction
     :param number_of_step_ahead: Number of step ahead for prediction
     :param Monthly_seasonality: Status of Monthly seasonality
     :param Weekly_seasonality: Status of weekly seasonality
     :param frequency: Type of date. Monthly or Daily
+    :param Confidence_limit: If be True model returns LCL and UCL
     :return: A 4*number_of_step_ahead dimension dataframe
     """
-    # Creating the well fitted formated based on the type of frequency
+
     # Handling dates format of darts
     for i in range(0, len(data["date"])):
         if (frequency == "Monthly"):
@@ -103,21 +104,15 @@ def NBEATSModel_predictor(data, number_of_step_ahead,Monthly_seasonality, Weekly
         month_series = datetime_attribute_timeseries(year_series, attribute="month", one_hot=True)
         covariates_month = year_series.stack(month_series)
 
-
-    # Creating model object
-    # Hyperparameters should be optimized.
-    my_model = NBEATSModel(input_chunk_length=30,
-                               output_chunk_length=7,
-                               generic_architecture=True,
-                               num_stacks=10,
-                               num_blocks=1,
-                               num_layers=4,
-                               layer_widths=512,
-                               n_epochs=100,
-                               nr_epochs_val_period=1,
-                               batch_size=800,
-                               model_name="nbeats_run")
-
+    my_model = TCNModel(
+        input_chunk_length=30,
+        output_chunk_length=20,
+        kernel_size=2,
+        num_filters=4,
+        dilation_base=2,
+        dropout=0,
+        random_state=0,
+        likelihood=GaussianLikelihood())
 
     if (Weekly_seasonality and frequency == "Daily"):
         my_model.fit(series, past_covariates=covariates_week.astype(np.float32))
@@ -127,11 +122,19 @@ def NBEATSModel_predictor(data, number_of_step_ahead,Monthly_seasonality, Weekly
         my_model.fit(series)
 
     # Creating final alignment for forecasting
+    prediction = my_model.predict(number_of_step_ahead, num_samples=1)
+    if Confidence_limit:
+        prediction_for_std = my_model.predict(number_of_step_ahead, num_samples=1000)
+        prediction_for_std = transformer.inverse_transform(prediction_for_std).std().values()
 
-    prediction = my_model.predict(number_of_step_ahead, num_samples = 1)
+    #Creating final alignment for forecasting
     forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 4)))
     forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
     forecast[1] = pd.DataFrame(transformer.inverse_transform(prediction).values())
+    if Confidence_limit:
+        forecast[2] = - 1.96 * pd.DataFrame(prediction_for_std)[0] + pd.DataFrame(forecast[1])[1]
+        forecast[3] = 1.96 * pd.DataFrame(prediction_for_std)[0] + pd.DataFrame(forecast[1])[1]
+
     forecast.columns = ["date", "prediction", "LCL", "UCL"]
 
     return forecast
