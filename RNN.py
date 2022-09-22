@@ -203,7 +203,7 @@ def RNNModel_predictor(data, number_of_step_ahead,RNN_Type):
                         hidden_dim=20,
                         dropout=0,
                         batch_size=16,
-                        n_epochs=100,
+                        n_epochs=50,
                         optimizer_kwargs={"lr": 1e-3},
                         model_name="data_RNN",
                         log_tensorboard=True,
