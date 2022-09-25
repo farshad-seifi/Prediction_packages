@@ -229,6 +229,7 @@ def DeepTCN_predictor(data, number_of_step_ahead, Confidence_limit):
     if Confidence_limit:
         forecast[2] = - 1.96 * pd.DataFrame(prediction_for_std)[0] + pd.DataFrame(forecast[1])[1]
         forecast[3] = 1.96 * pd.DataFrame(prediction_for_std)[0] + pd.DataFrame(forecast[1])[1]
+    forecast.columns = ["date", "prediction", "LCL", "UCL"]
 
     return forecast
 
