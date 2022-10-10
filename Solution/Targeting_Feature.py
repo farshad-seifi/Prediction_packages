@@ -4,6 +4,7 @@ import pandas as pd
 Bonus_data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\Bonus_table.xlsx")
 data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\test_data_month.xlsx")
 
+
 # The desire format of columns for targeting
 data.columns = ["date", "value", "segment"]
 
@@ -11,13 +12,13 @@ data.columns = ["date", "value", "segment"]
 Bonus_data.columns = ["percentage", "Bonus"]
 
 # The base price for each products selling
-Base_price = 10
+Base_price = 15
 # The desire point of realization "The initial value should be set as 1
-Economy_coefficient = 0.95
+Economy_coefficient = 0.9
 # If a total given target exists this value would be grater than 0
-Given_target = 20000
+Given_target = 0
 # The base model for targeting
-model = "SARIMA"
+model = "ExponentialSmoothing"
 
 
 def Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_target, model):
