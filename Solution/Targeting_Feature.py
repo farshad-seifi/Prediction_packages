@@ -99,7 +99,7 @@ def Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_t
     if (data.dtypes["value"] == 'int64'):
         targets["target"] = targets["target"].round()
 
-    for i in range(0, len(targets["'target"])):
+    for i in range(0, len(targets["target"])):
         if(targets["target"].iloc[i] < minimum):
             targets["target"].iloc[i] = minimum
 
