@@ -20,8 +20,14 @@ Given_target = 0
 # The base model for targeting
 model = "ExponentialSmoothing"
 
+# Set a minimum for the targets values
+minimum = 5
 
-def Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_target, model):
+"""
+Add non negative criteria
+"""
+
+def Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_target, model, minimum):
 
     """
     :param data: The historical data
@@ -39,6 +45,9 @@ def Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_t
     forecast = np.zeros((len(data["segment"].unique()), 2))
     forecast = pd.DataFrame(forecast)
     forecast.columns = ["segment", "forecast"]
+
+    data['date'] = data['date'].apply(date_handler)
+
 
     for i in range(0, len(data["segment"].unique())):
 
@@ -74,6 +83,7 @@ def Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_t
         targets["segment"].iloc[i] = data["segment"].unique()[i]
         targets["target"].iloc[i] = results["prediction"].iloc[0]
 
+
         # This part checks that the calculated target doesn't be grater than forecasted UCL
         if (results["UCL"].iloc[0] > 0):
             targets["target"].iloc[i] = min(results["UCL"].iloc[0], (targets["target"].iloc[i]) / Economy_coefficient)
@@ -88,6 +98,10 @@ def Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_t
     # If the type of historical data be integer this part rounds the target to integer number
     if (data.dtypes["value"] == 'int64'):
         targets["target"] = targets["target"].round()
+
+    for i in range(0, len(targets["'target"])):
+        if(targets["target"].iloc[i] < minimum):
+            targets["target"].iloc[i] = minimum
 
     # Calculating percentage of realization based on target and forecast
     actual = np.zeros((len(data["segment"].unique()), 2))
@@ -121,4 +135,4 @@ def Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_t
     return Total_Target, Total_Budget, actual, targets
 
 
-Total_Target, Total_Budget, actual, targets = Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_target, model)
+Total_Target, Total_Budget, actual, targets = Target_Calculator(data, Bonus_data, Base_price, Economy_coefficient, Given_target, model, minimum)
