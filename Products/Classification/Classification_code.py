@@ -13,14 +13,16 @@ from sklearn.naive_bayes import MultinomialNB
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from keras.utils.np_utils import to_categorical
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 
 
-train_data = pd.read_csv(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\kaggle\Titanic\train - Copy.csv")
-test_data = pd.read_csv(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\kaggle\Titanic\test.csv")
 
-del train_data["PassengerId"]
-del test_data["PassengerId"]
+test_data = pd.read_csv(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\Test data\مودم\prov_4380.csv")
+test_data.columns = ["Number", "National_ID", "Age", "Cell_type", "Register_date", "Sex", "Register_province", "Mostused_province", "Brand", "Model", "ARPU3", "ARPU12"]
+
+
 """
 Shenasaee sotoon label va saier sotoonhae mohem
 tasmimgiri dar mored null values
@@ -36,8 +38,9 @@ pishbini test
 data = train_data.copy()
 
 #Defining Label and model name
-Label = "Survived"
+Label = "Label"
 model_name = "RandomForest"
+
 
 
 def Missing_values_Handler(data, column_name):
@@ -106,16 +109,17 @@ def classifier_model(data, model_name):
                 del data[i]
 
             else:
-
-                if not (is_numeric_dtype(data[i])):
+                ##????
+                if (is_numeric_dtype(data[i])):
                     Missing_values_Handler(data, i)
 
                 if(is_string_dtype(data[i]) or is_categorical_dtype(data[i])):
 
                     label_encoder = LabelEncoder()
                     label_encoder.fit(data[i])
-                    Encoders[i] = label_encoder.fit(data[i])
-                    data[i] = label_encoder.transform(data[i])
+                    le_dict = dict(zip(label_encoder.classes_, label_encoder.transform(label_encoder.classes_)))
+                    data[i] = data[i].apply(lambda x: le_dict.get(x, '<Unknown>'))
+                    Encoders[i] = le_dict
 
 
                 #Filling missing values
@@ -125,18 +129,38 @@ def classifier_model(data, model_name):
         else:
             label_encoder = LabelEncoder()
             label_encoder.fit(data[i])
-            data[i] = label_encoder.transform(data[i])
+            le_dict = dict(zip(label_encoder.classes_, label_encoder.transform(label_encoder.classes_)))
+            data[i] = data[i].apply(lambda x: le_dict.get(x, '<Unknown>'))
+            Encoders[i] = le_dict
+
+
+
+    data.reset_index(inplace = True, drop=True)
+    scaled_data = data.drop([Label], axis=1)
+    column_name = scaled_data.columns
+    sc = StandardScaler()
+    Scaler = sc.fit(scaled_data)
+    scaled_data = sc.transform(scaled_data)
+    scaled_data = pd.DataFrame(scaled_data)
+
+    pca = PCA()
+    pca = pca.fit(scaled_data)
+    scaled_data = pca.transform(scaled_data)
+    scaled_data = pd.DataFrame(scaled_data)
+
+    scaled_data.columns = column_name
+    data = pd.concat([data[Label], scaled_data] , axis=1)
 
     #Data augmentation
-    ratio_vec = np.zeros((len(data["Survived"].unique()) , 3))
+    ratio_vec = np.zeros((len(data[Label].unique()) , 3))
     ratio_vec = pd.DataFrame(ratio_vec)
     ratio_vec.columns = ["label", "count", "rate"]
 
-    for i in range(0, len(data["Survived"].unique())):
+    for i in range(0, len(data[Label].unique())):
 
-        ratio_vec["count"].iloc[i] = len(data[data["Survived"] == data["Survived"].unique()[i]])
-        ratio_vec["rate"].iloc[i] = len(data[data["Survived"] == data["Survived"].unique()[i]]) / len(data)
-        ratio_vec["label"].iloc[i] = data["Survived"].unique()[i]
+        ratio_vec["count"].iloc[i] = len(data[data[Label] == data[Label].unique()[i]])
+        ratio_vec["rate"].iloc[i] = len(data[data[Label] == data[Label].unique()[i]]) / len(data)
+        ratio_vec["label"].iloc[i] = data[Label].unique()[i]
 
 
     if (ratio_vec["count"].max() / ratio_vec["count"].min()) >= 4:
@@ -153,6 +177,7 @@ def classifier_model(data, model_name):
         model = RandomForestClassifier(n_estimators=100)
         model.fit(train.drop([Label], axis= 1), train[Label])
         predictions = model.predict(test.drop([Label], axis=1))
+
 
     elif (model_name == "LogisticRegression"):
         model = LogisticRegression()
@@ -194,14 +219,16 @@ def classifier_model(data, model_name):
         prediction = model.predict(test.drop([Label], axis= 1))
         predictions = np.argmax(prediction, axis=1)
 
-    predictions = pd.DataFrame(predictions)
+
+
+
     accuracy = accuracy_score(test[Label], predictions)
     columns_name = data.drop([Label], axis=1).columns
 
-    return accuracy, model, Encoders, columns_name
+    return accuracy, model, Encoders, columns_name, Scaler, pca
 
 
-def classifier_predictor(model, test_data, Encoders, columns_name, model_name):
+def classifier_predictor(model, Label, test_data, Encoders, Scaler, pca, columns_name, model_name):
 
     test_data = test_data[columns_name]
 
@@ -212,18 +239,75 @@ def classifier_predictor(model, test_data, Encoders, columns_name, model_name):
             test_data[i].fillna(test_data[i].value_counts().idxmax(), inplace=True)
         if (is_string_dtype(test_data[i]) or is_categorical_dtype(test_data[i])):
 
-            test_data[i] = Encoders[i].transform(test_data[i])
+            test_data[i] = test_data[i].apply(lambda x: Encoders[i].get(x, -1))
 
-    if model_name == "DeepLearning":
+
+    test_data = Scaler.transform(test_data)
+    test_data = pd.DataFrame(test_data)
+    test_data = pca.transform(test_data)
+    test_data = pd.DataFrame(test_data)
+    test_data.columns = columns_name
+
+    if (model_name == "DeepLearning"):
         prediction = model.predict(test_data)
         predictions = np.argmax(prediction, axis=1)
+        predictions = pd.DataFrame(predictions)
+        predictions_matrix = predictions
+        predictions_matrix.columns = ["Label"]
+
+        inv_Label = {v: k for k, v in Encoders[Label].items()}
+        predictions_matrix["Label"] = predictions_matrix["Label"].apply(lambda x: inv_Label.get(x, -1))
+
+
+    elif (model_name == "LinearSVC"):
+        predictions = model.predict(test_data)
+        predictions = pd.DataFrame(predictions)
+        predictions_matrix = predictions
+        predictions_matrix.columns = ["Label"]
+        inv_Label = {v: k for k, v in Encoders[Label].items()}
+        predictions_matrix["Label"] = predictions_matrix["Label"].apply(lambda x: inv_Label.get(x, -1))
+
     else:
         predictions = model.predict(test_data)
 
-    return predictions
+        probabilities = model.predict_proba(test_data)
+
+        probabilities_matrix = np.zeros((len(probabilities), 3))
+        probabilities_matrix = pd.DataFrame(probabilities_matrix)
+        probabilities_matrix.columns = ["first_probability", "Second_class","second_probability"]
+
+        for i in range(0, len(probabilities)):
+            probabilities_matrix["first_probability"].iloc[i] = sorted(probabilities[i], reverse=True)[0]
+            probabilities_matrix["second_probability"].iloc[i] = sorted(probabilities[i], reverse=True)[1]
+            probabilities_matrix["Second_class"].iloc[i] = np.argsort(probabilities[i])[-2]
+
+        predictions_matrix = np.zeros((len(predictions), 4))
+        predictions_matrix = pd.DataFrame(predictions_matrix)
+        predictions_matrix.columns = ["Label", "first_probability", "Second_class", "second_probability"]
+        predictions_matrix["Label"] = predictions
+        predictions_matrix["first_probability"] = probabilities_matrix["first_probability"]
+        predictions_matrix["second_probability"] = probabilities_matrix["second_probability"]
+        predictions_matrix["Second_class"] = probabilities_matrix["Second_class"]
+
+        inv_Label = {v: k for k, v in Encoders[Label].items()}
+        predictions_matrix["Label"] = predictions_matrix["Label"].apply(lambda x: inv_Label.get(x, -1))
+        predictions_matrix["Second_class"] = predictions_matrix["Second_class"].apply(lambda x: inv_Label.get(x, -1))
+
+    return predictions_matrix
 
 
-accuracy , model, Encoders, columns_name = classifier_model(data, model_name)
-prediction = classifier_predictor(model, test_data, Encoders, columns_name, model_name)
+accuracy , model, Encoders, columns_name, Scaler, pca = classifier_model(data, model_name)
+prediction = classifier_predictor(model, Label, test_data, Encoders, Scaler, pca, columns_name, model_name)
 
 
+model_list = ["RandomForest",
+              "LogisticRegression",
+              "Xgboost",
+              "LinearSVC",
+              "DeepLearning"]
+
+accuracy_list = []
+for i in model_list:
+    accuracy, model, Encoders, columns_name, Scaler, pca = classifier_model(data, i)
+    accuracy_list.append(accuracy)
+    prediction = classifier_predictor(model, test_data, Encoders, Scaler, pca, columns_name, i)
