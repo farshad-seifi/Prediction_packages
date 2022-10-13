@@ -36,6 +36,7 @@ def date_handler(input):
                 date = str(date) + "-01"
             else:
                 date = str(date) + "01"
+
         if "/" in str(date) or "-" in str(date):
             date = str(date).replace("-" , "").replace("/" , "")
         if int(str(date)[0:4]) < 1500:
@@ -141,6 +142,9 @@ def ExponentialSmoothing_predictor(data, number_of_step_ahead, Confidence_limit)
         forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 4)))
         forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
         forecast[1] = prediction
+        forecast[2] = prediction
+        forecast[3] = prediction
+
 
 
     forecast.columns = ["date", "prediction", "LCL", "UCL"]
