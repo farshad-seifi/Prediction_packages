@@ -33,6 +33,7 @@ def date_handler(input):
                 date = str(date) + "-01"
             else:
                 date = str(date) + "01"
+
         if "/" in str(date) or "-" in str(date):
             date = str(date).replace("-" , "").replace("/" , "")
         if int(str(date)[0:4]) < 1500:
@@ -45,14 +46,22 @@ def date_handler(input):
 
 
 def frequency_finder(data):
-    if((data["date"].iloc[0].hour + data["date"].iloc[1].hour) > 0 ):
-        frequency = "Hourly"
-    elif((data["date"].iloc[1]-data["date"].iloc[0]).days == 1):
-        frequency = "Daily"
-    elif(((data["date"].iloc[1]-data["date"].iloc[0]).days > 27) and ((data["date"].iloc[1]-data["date"].iloc[0]).days < 32)):
-        frequency = "Monthly"
-    elif(((data["date"].iloc[1]-data["date"].iloc[0]).days > 363) and ((data["date"].iloc[1]-data["date"].iloc[0]).days < 366)):
-        frequency = "Yearly"
+    if(len(data) >= 2):
+        if ((data["date"].iloc[0].hour + data["date"].iloc[1].hour) > 0):
+            frequency = "Hourly"
+        elif ((data["date"].iloc[1] - data["date"].iloc[0]).days == 1):
+            frequency = "Daily"
+        elif (((data["date"].iloc[1] - data["date"].iloc[0]).days > 27) and (
+                (data["date"].iloc[1] - data["date"].iloc[0]).days < 32)):
+            frequency = "Monthly"
+        elif (((data["date"].iloc[1] - data["date"].iloc[0]).days > 363) and (
+                (data["date"].iloc[1] - data["date"].iloc[0]).days < 366)):
+            frequency = "Yearly"
+        else:
+            frequency = "None"
+    else:
+        frequency = "None"
+
 
     return frequency
 
@@ -98,88 +107,110 @@ def SARIMA_predictor(data, number_of_step_ahead, Confidence_limit):
             data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month) + "-" + str(day) + " " + str(hour) + ":00:00"
 
 
-    series = TimeSeries.from_dataframe(data, 'date', 'value').astype(np.float32)
+    if len(data) >= 6:
 
-    # Creating model object. by this block engine search till SARIMA(2,2,2)(1,1,1)
-    # and selects the best value for (p,d,q)(P,D,Q) between these values.
-    # changing the range of this hyperparameter may produce better results but reduce the speed of fitting.
-    if (frequency == "Hourly" and (len(data["date"]) > 24) and
-            (check_seasonality(series, m = 24, max_lag = len(data["date"]))[0])):
+        if frequency != 'None':
+            series = TimeSeries.from_dataframe(data, 'date', 'value').astype(np.float32)
 
-        arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
-                                 start_Q=0, max_P=1,
-                                 max_D=1, max_Q=1, m=24, seasonal=True, error_action='ignore',
-                                 trace=True,
-                                 suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
+        # Creating model object. by this block engine search till SARIMA(2,2,2)(1,1,1)
+        # and selects the best value for (p,d,q)(P,D,Q) between these values.
+        # changing the range of this hyperparameter may produce better results but reduce the speed of fitting.
+        if (frequency == "Hourly" and (len(data["date"]) > 3 * 24) and
+                (check_seasonality(series, m=24, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Hourly" and (len(data["date"]) > 7*24) and
-          (check_seasonality(series, m = 7*24, max_lag = len(data["date"]))[0])):
+            arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
+                                     start_Q=0, max_P=1,
+                                     max_D=1, max_Q=1, m=24, seasonal=True, error_action='ignore',
+                                     trace=True,
+                                     suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
 
-        arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
-                                 start_Q=0, max_P=1,
-                                 max_D=1, max_Q=1, m=7*24, seasonal=True, error_action='ignore',
-                                 trace=True,
-                                 suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
+        elif (frequency == "Hourly" and (len(data["date"]) > 3 * 7 * 24) and
+              (check_seasonality(series, m=7 * 24, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Hourly" and (len(data["date"]) > 30 * 24) and
-          (check_seasonality(series, m=30 * 24, max_lag=len(data["date"]))[0])):
+            arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
+                                     start_Q=0, max_P=1,
+                                     max_D=1, max_Q=1, m=7 * 24, seasonal=True, error_action='ignore',
+                                     trace=True,
+                                     suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
 
-        arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
-                                 start_Q=0, max_P=1,
-                                 max_D=1, max_Q=1, m=30*24, seasonal=True, error_action='ignore',
-                                 trace=True,
-                                 suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
+        elif (frequency == "Hourly" and (len(data["date"]) > 3 * 30 * 24) and
+              (check_seasonality(series, m=30 * 24, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Daily" and (len(data["date"]) > 7) and
-          (check_seasonality(series, m=7, max_lag=len(data["date"]))[0])):
+            arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
+                                     start_Q=0, max_P=1,
+                                     max_D=1, max_Q=1, m=30 * 24, seasonal=True, error_action='ignore',
+                                     trace=True,
+                                     suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
 
-        arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
-                                 start_Q=0, max_P=1,
-                                 max_D=1, max_Q=1, m=7, seasonal=True, error_action='ignore',
-                                 trace=True,
-                                 suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
+        elif (frequency == "Daily" and (len(data["date"]) > 3 * 7) and
+              (check_seasonality(series, m=7, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Daily" and (len(data["date"]) > 30) and
-          (check_seasonality(series, m=30, max_lag=len(data["date"]))[0])):
+            arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
+                                     start_Q=0, max_P=1,
+                                     max_D=1, max_Q=1, m=7, seasonal=True, error_action='ignore',
+                                     trace=True,
+                                     suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
 
-        arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
-                                 start_Q=0, max_P=1,
-                                 max_D=1, max_Q=1, m=30, seasonal=True, error_action='ignore',
-                                 trace=True,
-                                 suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
+        elif (frequency == "Daily" and (len(data["date"]) > 3 * 30) and
+              (check_seasonality(series, m=30, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Monthly" and (len(data["date"]) > 12) and
-          (check_seasonality(series, m=12, max_lag=len(data["date"]))[0])):
+            arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
+                                     start_Q=0, max_P=1,
+                                     max_D=1, max_Q=1, m=30, seasonal=True, error_action='ignore',
+                                     trace=True,
+                                     suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
 
-        arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
-                                 start_Q=0, max_P=1,
-                                 max_D=1, max_Q=1, m=12, seasonal=True, error_action='ignore',
-                                 trace=True,
-                                 suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
+        elif (frequency == "Monthly" and (len(data["date"]) > 3 * 12) and
+              (check_seasonality(series, m=12, max_lag=len(data["date"]))[0])):
 
+            arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
+                                     start_Q=0, max_P=1,
+                                     max_D=1, max_Q=1, m=12, seasonal=True, error_action='ignore',
+                                     trace=True,
+                                     suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
+        else:
+            arima_model = auto_arima(data["value"], start_p=0, start_q=0, max_p=2, max_d=2, max_q=2, start_P=0,
+                                     start_Q=0, max_P=1,
+                                     max_D=1, max_Q=1, error_action='ignore',
+                                     trace=True,
+                                     suppress_warnings=True, stepwise=True, random_state=20, n_fits=50)
 
-    arima_model.fit(data["value"])
+        arima_model.fit(data["value"])
 
-    future = arima_model.predict(n_periods=number_of_step_ahead, return_conf_int=Confidence_limit)
+        future = arima_model.predict(n_periods=number_of_step_ahead, return_conf_int=Confidence_limit)
 
-    if Confidence_limit:
-        confident_limit = future[1]
-        future = future[0]
+        if Confidence_limit:
+            confident_limit = future[1]
+            future = future[0]
 
-    # Creating final alignment for forecasting
-    forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 4)))
-    forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
-    forecast[1] = future
+        # Creating final alignment for forecasting
+        forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 4)))
+        forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
+        forecast[1] = future
 
-    if Confidence_limit:
-        for i in range(0, len(confident_limit)):
-            forecast[2].iloc[i] = confident_limit[i][0]
-            forecast[3].iloc[i] = confident_limit[i][1]
+        if Confidence_limit:
+            for i in range(0, len(confident_limit)):
+                forecast[2].iloc[i] = confident_limit[i][0]
+                forecast[3].iloc[i] = confident_limit[i][1]
+
+    else:
+        prediction = np.zeros(number_of_step_ahead)
+        for i in range(0, number_of_step_ahead):
+            prediction[i] = data["value"].mean()
+        # Creating final alignment for forecasting
+        forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 4)))
+        forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
+        forecast[1] = prediction
+        forecast[2] = prediction
+        forecast[3] = prediction
+
 
     forecast.columns = ["date", "prediction", "LCL", "UCL"]
-
     return forecast
+
 
 
 train_data['date'] = train_data['date'].apply(date_handler)
 results = SARIMA_predictor(train_data, number_of_step_ahead, Confidence_limit)
+
+
