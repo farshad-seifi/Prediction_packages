@@ -43,6 +43,8 @@ model_name = "RandomForest"
 
 
 
+
+
 def Missing_values_Handler(data, column_name):
 
     """
@@ -110,7 +112,7 @@ def classifier_model(data, model_name):
 
             else:
                 ##????
-                if (is_numeric_dtype(data[i])):
+                if not(is_numeric_dtype(data[i])):
                     Missing_values_Handler(data, i)
 
                 if(is_string_dtype(data[i]) or is_categorical_dtype(data[i])):
@@ -311,3 +313,4 @@ for i in model_list:
     accuracy, model, Encoders, columns_name, Scaler, pca = classifier_model(data, i)
     accuracy_list.append(accuracy)
     prediction = classifier_predictor(model, test_data, Encoders, Scaler, pca, columns_name, i)
+
