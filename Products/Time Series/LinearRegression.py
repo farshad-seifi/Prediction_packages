@@ -5,6 +5,7 @@ import jdatetime
 from darts.models import LinearRegressionModel
 from darts.dataprocessing.transformers import Scaler, MissingValuesFiller
 from datetime import datetime, timedelta
+from darts import metrics
 
 
 data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\test_data_month.xlsx")
@@ -36,6 +37,7 @@ def date_handler(input):
                 date = str(date) + "-01"
             else:
                 date = str(date) + "01"
+
         if "/" in str(date) or "-" in str(date):
             date = str(date).replace("-" , "").replace("/" , "")
         if int(str(date)[0:4]) < 1500:
@@ -48,16 +50,25 @@ def date_handler(input):
 
 
 def frequency_finder(data):
-    if((data["date"].iloc[0].hour + data["date"].iloc[1].hour) > 0 ):
-        frequency = "Hourly"
-    elif((data["date"].iloc[1]-data["date"].iloc[0]).days == 1):
-        frequency = "Daily"
-    elif(((data["date"].iloc[1]-data["date"].iloc[0]).days > 27) and ((data["date"].iloc[1]-data["date"].iloc[0]).days < 32)):
-        frequency = "Monthly"
-    elif(((data["date"].iloc[1]-data["date"].iloc[0]).days > 363) and ((data["date"].iloc[1]-data["date"].iloc[0]).days < 366)):
-        frequency = "Yearly"
+    if(len(data) >= 2):
+        if ((data["date"].iloc[0].hour + data["date"].iloc[1].hour) > 0):
+            frequency = "Hourly"
+        elif ((data["date"].iloc[1] - data["date"].iloc[0]).days == 1):
+            frequency = "Daily"
+        elif (((data["date"].iloc[1] - data["date"].iloc[0]).days > 27) and (
+                (data["date"].iloc[1] - data["date"].iloc[0]).days < 32)):
+            frequency = "Monthly"
+        elif (((data["date"].iloc[1] - data["date"].iloc[0]).days > 363) and (
+                (data["date"].iloc[1] - data["date"].iloc[0]).days < 366)):
+            frequency = "Yearly"
+        else:
+            frequency = "None"
+    else:
+        frequency = "None"
+
 
     return frequency
+
 
 def monthdelta(date, delta):
     # This function calculates the difference between to date based on month
@@ -105,19 +116,39 @@ def LinearRegression(data, number_of_step_ahead):
     transformer = Scaler()
     series = transformer.fit_transform(series)
 
-    parameters = {"lags" : [int(np.floor(len(data)/20)) , int(np.floor(len(data)/10)),
+    if len(data) > 20:
+        parameters = {"lags" : [int(np.floor(len(data)/20)) , int(np.floor(len(data)/10)),
                             int(np.floor(len(data)/5)), int(np.floor(len(data)/3)) ] }
-    best_model = LinearRegressionModel.gridsearch(parameters= parameters,
-                                                    series= series,
-                                                    forecast_horizon= number_of_step_ahead)
 
-    my_model = LinearRegressionModel(lags = best_model[1]["lags"])
-    my_model.fit(series)
-    prediction = my_model.predict(number_of_step_ahead, num_samples=1)
-    forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 4)))
-    forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
-    forecast[1] = pd.DataFrame(transformer.inverse_transform(prediction).values())
-    forecast.columns = ["date", "prediction", "LCL", "UCL"]
+        best_model = LinearRegressionModel.gridsearch(parameters=parameters,
+                                                      series=series,
+                                                      forecast_horizon=number_of_step_ahead,
+                                                      metric=metrics.mse)
+
+        my_model = LinearRegressionModel(lags=best_model[1]["lags"])
+
+    elif len(data) >= 6:
+        my_model = LinearRegressionModel(lags=int(len(data)/2))
+
+    if len(data) >= 6:
+
+        my_model.fit(series)
+        prediction = my_model.predict(number_of_step_ahead, num_samples=1)
+        forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 4)))
+        forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
+        forecast[1] = pd.DataFrame(transformer.inverse_transform(prediction).values())
+        forecast.columns = ["date", "prediction", "LCL", "UCL"]
+
+    else:
+        prediction = np.zeros(number_of_step_ahead)
+        for i in range(0, number_of_step_ahead):
+            prediction[i] = data["value"].mean()
+        # Creating final alignment for forecasting
+        forecast = pd.DataFrame(np.zeros((number_of_step_ahead, 4)))
+        forecast[0] = [x + len(data["value"]) for x in range(1, 1 + number_of_step_ahead)]
+        forecast[1] = prediction
+        forecast.columns = ["date", "prediction", "LCL", "UCL"]
+
 
     return forecast
 
