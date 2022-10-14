@@ -25,16 +25,6 @@ else:
     train_data = data
 
 
-def monthdelta(date, delta):
-    # This function calculates the difference between to date based on month
-    m, y = (date.month + delta) % 12, date.year + ((date.month) + delta - 1) // 12
-    if not m: m = 12
-    d = min(date.day, [31,
-                       29 if y % 4 == 0 and (not y % 100 == 0 or y % 400 == 0) else 28,
-                       31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1])
-
-    return date.replace(day=d, month=m, year=y)
-
 def date_handler(input):
     date = input
     try:
@@ -45,6 +35,7 @@ def date_handler(input):
                 date = str(date) + "-01"
             else:
                 date = str(date) + "01"
+
         if "/" in str(date) or "-" in str(date):
             date = str(date).replace("-" , "").replace("/" , "")
         if int(str(date)[0:4]) < 1500:
@@ -57,16 +48,36 @@ def date_handler(input):
 
 
 def frequency_finder(data):
-    if((data["date"].iloc[0].hour + data["date"].iloc[1].hour) > 0 ):
-        frequency = "Hourly"
-    elif((data["date"].iloc[1]-data["date"].iloc[0]).days == 1):
-        frequency = "Daily"
-    elif(((data["date"].iloc[1]-data["date"].iloc[0]).days > 27) and ((data["date"].iloc[1]-data["date"].iloc[0]).days < 32)):
-        frequency = "Monthly"
-    elif(((data["date"].iloc[1]-data["date"].iloc[0]).days > 363) and ((data["date"].iloc[1]-data["date"].iloc[0]).days < 366)):
-        frequency = "Yearly"
+    if(len(data) >= 2):
+        if ((data["date"].iloc[0].hour + data["date"].iloc[1].hour) > 0):
+            frequency = "Hourly"
+        elif ((data["date"].iloc[1] - data["date"].iloc[0]).days == 1):
+            frequency = "Daily"
+        elif (((data["date"].iloc[1] - data["date"].iloc[0]).days > 27) and (
+                (data["date"].iloc[1] - data["date"].iloc[0]).days < 32)):
+            frequency = "Monthly"
+        elif (((data["date"].iloc[1] - data["date"].iloc[0]).days > 363) and (
+                (data["date"].iloc[1] - data["date"].iloc[0]).days < 366)):
+            frequency = "Yearly"
+        else:
+            frequency = "None"
+    else:
+        frequency = "None"
+
 
     return frequency
+
+
+
+def monthdelta(date, delta):
+    # This function calculates the difference between to date based on month
+    m, y = (date.month + delta) % 12, date.year + ((date.month) + delta - 1) // 12
+    if not m: m = 12
+    d = min(date.day, [31,
+                       29 if y % 4 == 0 and (not y % 100 == 0 or y % 400 == 0) else 28,
+                       31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1])
+
+    return date.replace(day=d, month=m, year=y)
 
 
 def fbprophet_predictor(data, number_of_step_ahead, Confidence_limit):
@@ -80,61 +91,63 @@ def fbprophet_predictor(data, number_of_step_ahead, Confidence_limit):
 
     frequency = frequency_finder(data)
 
-    for i in range(0, len(data["date"])):
-        if (frequency == "Monthly"):
-            year = (monthdelta(datetime.today(), -i)).year
-            month = (monthdelta(datetime.today(), -i)).month
-            day = (monthdelta(datetime.today(), -i)).day
-            data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month)
-        elif (frequency == "Daily"):
-            year = (datetime.today() - timedelta(days=i)).year
-            month = (datetime.today() - timedelta(days=i)).month
-            day = (datetime.today() - timedelta(days=i)).day
-            data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month) + "-" + str(day)
-        elif (frequency == "Hourly"):
-            year = (datetime.today() - timedelta(hours=i)).year
-            month = (datetime.today() - timedelta(hours=i)).month
-            day = (datetime.today() - timedelta(hours=i)).day
-            hour = (datetime.today() - timedelta(hours=i)).hour
-            data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month) + "-" + str(day) + " " + str(hour) + ":00:00"
+    if len(data) >=6 and frequency != "None":
+        for i in range(0, len(data["date"])):
+            if (frequency == "Monthly"):
+                year = (monthdelta(datetime.today(), -i)).year
+                month = (monthdelta(datetime.today(), -i)).month
+                day = (monthdelta(datetime.today(), -i)).day
+                data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month)
+            elif (frequency == "Daily"):
+                year = (datetime.today() - timedelta(days=i)).year
+                month = (datetime.today() - timedelta(days=i)).month
+                day = (datetime.today() - timedelta(days=i)).day
+                data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month) + "-" + str(day)
+            elif (frequency == "Hourly"):
+                year = (datetime.today() - timedelta(hours=i)).year
+                month = (datetime.today() - timedelta(hours=i)).month
+                day = (datetime.today() - timedelta(hours=i)).day
+                hour = (datetime.today() - timedelta(hours=i)).hour
+                data["date"].iloc[len(data["date"]) - i - 1] = str(year) + "-" + str(month) + "-" + str(
+                    day) + " " + str(hour) + ":00:00"
 
+        series = TimeSeries.from_dataframe(data, 'date', 'value').astype(np.float32)
 
-    series = TimeSeries.from_dataframe(data, 'date', 'value').astype(np.float32)
+        # Adding monthly seasonality to data
+        m = Prophet()
 
-    # Adding monthly seasonality to data
-    m = Prophet()
+        if (frequency == "Hourly" and (len(data["date"]) > 24) and
+                (check_seasonality(series, m=24, max_lag=len(data["date"]))[0])):
 
-    if (frequency == "Hourly" and (len(data["date"]) > 24) and
-            (check_seasonality(series, m = 24, max_lag = len(data["date"]))[0])):
+            m.add_seasonality(name='Daily', period=24, fourier_order=5)
 
-        m.add_seasonality(name='Daily', period= 24, fourier_order=5)
+        elif (frequency == "Hourly" and (len(data["date"]) > 7 * 24) and
+              (check_seasonality(series, m=7 * 24, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Hourly" and (len(data["date"]) > 7*24) and
-          (check_seasonality(series, m = 7*24, max_lag = len(data["date"]))[0])):
+            m.add_seasonality(name='Weekly', period=7 * 24, fourier_order=5)
 
-        m.add_seasonality(name='Weekly', period= 7*24, fourier_order=5)
+        elif (frequency == "Hourly" and (len(data["date"]) > 30 * 24) and
+              (check_seasonality(series, m=30 * 24, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Hourly" and (len(data["date"]) > 30 * 24) and
-          (check_seasonality(series, m=30 * 24, max_lag=len(data["date"]))[0])):
+            m.add_seasonality(name='Monthly', period=30 * 24, fourier_order=5)
 
-        m.add_seasonality(name='Monthly', period= 30*24, fourier_order=5)
+        elif (frequency == "Daily" and (len(data["date"]) > 7) and
+              (check_seasonality(series, m=7, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Daily" and (len(data["date"]) > 7) and
-          (check_seasonality(series, m=7, max_lag=len(data["date"]))[0])):
+            m.add_seasonality(name='Weekly', period=7, fourier_order=5)
 
-        m.add_seasonality(name='Weekly', period= 7, fourier_order=5)
+        elif (frequency == "Daily" and (len(data["date"]) > 30) and
+              (check_seasonality(series, m=30, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Daily" and (len(data["date"]) > 30) and
-          (check_seasonality(series, m=30, max_lag=len(data["date"]))[0])):
+            m.add_seasonality(name='Monthly', period=30, fourier_order=5)
 
-        m.add_seasonality(name='Monthly', period= 30, fourier_order=5)
+        elif (frequency == "Monthly" and (len(data["date"]) > 12) and
+              (check_seasonality(series, m=12, max_lag=len(data["date"]))[0])):
 
-    elif (frequency == "Monthly" and (len(data["date"]) > 12) and
-          (check_seasonality(series, m=12, max_lag=len(data["date"]))[0])):
+            m.add_seasonality(name='Yearly', period=12, fourier_order=5)
 
-        m.add_seasonality(name='Yearly', period= 12, fourier_order=5)
-
-
+    else:
+        m = Prophet()
 
 
     # Changing column's name to fbprophet format
@@ -147,7 +160,6 @@ def fbprophet_predictor(data, number_of_step_ahead, Confidence_limit):
         month = (datetime.today() - timedelta(days=i)).month
         day = (datetime.today() - timedelta(days=i)).day
         data["ds"].iloc[len(data["ds"]) - i - 1] = str(year) + "-" + str(month) + "-" + str(day)
-
 
     m.fit(data)
     future = m.make_future_dataframe(periods=number_of_step_ahead)
