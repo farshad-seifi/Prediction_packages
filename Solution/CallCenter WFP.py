@@ -178,8 +178,15 @@ def CallCenter_WFP(data, Forward_days, Start_Working, End_Working, Wrap_time, AT
             Final_Agents[i].iloc[index] = globals()[f"x{i + 1}"].varValue
 
         index += 1
-
+    
+    #Changing columns name of Final agents
+    columns_name = []
+    for i in range(0, len(Shifts)):
+        columns_name.append(str(Shifts[i]))
+    Final_Agents.columns = columns_name
+        
     return prediction, Final_Agents
+
 
 
 prediction, Final_Agents = CallCenter_WFP(data, Forward_days, Start_Working, End_Working, Wrap_time, ATA,
