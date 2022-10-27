@@ -22,43 +22,39 @@ from sklearn.preprocessing import StandardScaler
 test_data = pd.read_csv(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\Test data\مودم\prov_4380.csv")
 test_data.columns = ["Number", "National_ID", "Age", "Cell_type", "Register_date", "Sex", "Register_province", "Mostused_province", "Brand", "Model", "ARPU3", "ARPU12"]
 
+test_data = test_data.sample(n = 10000)
+train_data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\Test data\مودم\modem_buyers_info.xlsx")
 
-"""
-Shenasaee sotoon label va saier sotoonhae mohem
-tasmimgiri dar mored null values
-tabdil dadeha be categorical va ya transform
-estekhraje feature jadid
-PCA
-Data Augmentation
-fit kardan model
-eraee natayej
-pishbini test
-"""
+
 
 data = train_data.copy()
 
 #Defining Label and model name
 Label = "Label"
+
+#Selecting model
 model_name = "RandomForest"
 
 
 
 
-
-def Missing_values_Handler(data, column_name):
+def Missing_values_Handler(reference_data, target_data, column_name):
 
     """
-    :param data: Entire data set for using other features in cleaning missing values
+    :param reference_data: The null values are fill based on the values of this data set
+    :param target_data: Target dataset which should be filled
     :param column_name: The desire column which should be cleaned
     :return: This function doesn't return anything and fills missing values inplace
     """
 
     if not (is_numeric_dtype(data[column_name])):
         #Filling categorical with mode of them
-        data[column_name].fillna(data[column_name].value_counts().idxmax(), inplace=True)
+        target_data[column_name].fillna(reference_data[column_name].value_counts().idxmax(), inplace=True)
     else:
         # Filling numeric with mean of them
-        data[column_name].fillna(data[column_name].mean(), inplace=True)
+        target_data[column_name].fillna(reference_data[column_name].mean(), inplace=True)
+
+
 
 def Outlier_Handler(data, column_name):
 
@@ -67,7 +63,7 @@ def Outlier_Handler(data, column_name):
     :param column_name: The desire column which should be cleaned
     :return: This function returns the cleand data with reduced rows
     """
-    # This part checks the
+    # This part checks the existence of outlier through the IQR method
     IQR_outliers = []
     sorted_data = sorted(data[column_name])
     q1 = np.percentile(sorted_data, 25)
@@ -79,6 +75,7 @@ def Outlier_Handler(data, column_name):
         if ((i < lwr_bound) or (i > upr_bound)):
             IQR_outliers.append(i)
 
+    # This part checks the existence of outlier through the Zscore method
     Zscore_outliers = []
     lcl = data[column_name].mean() - 2.64 * data[column_name].std()
     ucl = data[column_name].mean() + 2.64 * data[column_name].std()
@@ -98,9 +95,19 @@ def Outlier_Handler(data, column_name):
 
 def classifier_model(data, model_name):
 
+    """
+    :param data: The entire training dataset
+    :param model_name: The desire model for classification
+    :return: accuracy, model, Encoders, columns_name, Scaler, pca
+    """
+
     Encoders = {}
     for i in data.columns:
         if i != Label:
+
+            # Check count of null and distinct values. If a column has alot of null and distinct
+            # value, it should be removed from modeling.
+
             null_percentage = data[i].isna().sum() / len(data[i])
             diversification = (len(train_data[i].unique()) + train_data[i].isna().sum())/ len(data[i])
 
@@ -111,10 +118,11 @@ def classifier_model(data, model_name):
                 del data[i]
 
             else:
-                ##????
+                # Fill missing values
                 if not(is_numeric_dtype(data[i])):
-                    Missing_values_Handler(data, i)
+                    Missing_values_Handler(data, data, i)
 
+                # Encoding categorical values
                 if(is_string_dtype(data[i]) or is_categorical_dtype(data[i])):
 
                     label_encoder = LabelEncoder()
@@ -124,9 +132,9 @@ def classifier_model(data, model_name):
                     Encoders[i] = le_dict
 
 
-                #Filling missing values
+                # Filling missing values
                 if (is_numeric_dtype(data[i])):
-                    Missing_values_Handler(data, i)
+                    Missing_values_Handler(data, data, i)
                     data = Outlier_Handler(data, i)
         else:
             label_encoder = LabelEncoder()
@@ -136,7 +144,7 @@ def classifier_model(data, model_name):
             Encoders[i] = le_dict
 
 
-
+    # Fitting Scalers to data
     data.reset_index(inplace = True, drop=True)
     scaled_data = data.drop([Label], axis=1)
     column_name = scaled_data.columns
@@ -145,15 +153,15 @@ def classifier_model(data, model_name):
     scaled_data = sc.transform(scaled_data)
     scaled_data = pd.DataFrame(scaled_data)
 
-    pca = PCA()
-    pca = pca.fit(scaled_data)
-    scaled_data = pca.transform(scaled_data)
-    scaled_data = pd.DataFrame(scaled_data)
+    # pca = PCA()
+    # pca = pca.fit(scaled_data)
+    # scaled_data = pca.transform(scaled_data)
+    # scaled_data = pd.DataFrame(scaled_data)
 
     scaled_data.columns = column_name
     data = pd.concat([data[Label], scaled_data] , axis=1)
 
-    #Data augmentation
+    # Data augmentation
     ratio_vec = np.zeros((len(data[Label].unique()) , 3))
     ratio_vec = pd.DataFrame(ratio_vec)
     ratio_vec.columns = ["label", "count", "rate"]
@@ -172,9 +180,11 @@ def classifier_model(data, model_name):
             data = data.append(resampled_data)
 
 
+    # Spliting dataset to train and test
     train, test = train_test_split(data, test_size= 0.3)
     number_of_classes = len(data[Label].unique())
 
+    # Fitting model to training data
     if (model_name == "RandomForest") :
         model = RandomForestClassifier(n_estimators=100)
         model.fit(train.drop([Label], axis= 1), train[Label])
@@ -223,33 +233,50 @@ def classifier_model(data, model_name):
 
 
 
-
+    # Calculating accuracy for training dataset
     accuracy = accuracy_score(test[Label], predictions)
     columns_name = data.drop([Label], axis=1).columns
 
-    return accuracy, model, Encoders, columns_name, Scaler, pca
+    return accuracy, model, Encoders, columns_name, Scaler
 
 
-def classifier_predictor(model, Label, test_data, Encoders, Scaler, pca, columns_name, model_name):
+def classifier_predictor(model, Label, train_data, test_data, Encoders, Scaler, columns_name, model_name):
 
+    """
+    :param model: The Fitted model for classification
+    :param Label: The column name which includes lables
+    :param test_data: The final data for classification
+    :param Encoders: Encoders dictionary
+    :param Scaler: Scaler dictionary
+    :param pca: PCA dictionary
+    :param columns_name: The remaining columns name in training section
+    :param model_name: Name of the selected model for classification
+    :return: predictions_matrix
+    """
+
+    # Selecting remaining columns based on training process
     test_data = test_data[columns_name]
+
 
     for i in test_data.columns:
         if (is_numeric_dtype(test_data[i])):
-            test_data[i].fillna(test_data[i].mean(), inplace=True)
+            Missing_values_Handler(train_data, test_data, i)
         else:
-            test_data[i].fillna(test_data[i].value_counts().idxmax(), inplace=True)
+            Missing_values_Handler(train_data, test_data, i)
+
+        # Applying encoders to test data
         if (is_string_dtype(test_data[i]) or is_categorical_dtype(test_data[i])):
 
             test_data[i] = test_data[i].apply(lambda x: Encoders[i].get(x, -1))
 
-
+    # Fitting Scalers and PCA
     test_data = Scaler.transform(test_data)
     test_data = pd.DataFrame(test_data)
-    test_data = pca.transform(test_data)
-    test_data = pd.DataFrame(test_data)
+    # test_data = pca.transform(test_data)
+    # test_data = pd.DataFrame(test_data)
     test_data.columns = columns_name
 
+    # Predicting first and second classes with their related probabilities
     if (model_name == "DeepLearning"):
         prediction = model.predict(test_data)
         predictions = np.argmax(prediction, axis=1)
@@ -298,8 +325,8 @@ def classifier_predictor(model, Label, test_data, Encoders, Scaler, pca, columns
     return predictions_matrix
 
 
-accuracy , model, Encoders, columns_name, Scaler, pca = classifier_model(data, model_name)
-prediction = classifier_predictor(model, Label, test_data, Encoders, Scaler, pca, columns_name, model_name)
+accuracy , model, Encoders, columns_name, Scaler = classifier_model(data, model_name)
+prediction = classifier_predictor(model, Label, train_data, test_data, Encoders, Scaler, columns_name, model_name)
 
 
 model_list = ["RandomForest",
