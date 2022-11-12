@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_object_dtype, is_numeric_dtype, is_bool_dtype, is_string_dtype, is_categorical_dtype
+from pandas.api.types import is_object_dtype, is_numeric_dtype, is_bool_dtype, is_string_dtype, is_categorical_dtype, is_integer_dtype
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score,confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
 import xgboost as xgb
 from sklearn.svm import LinearSVC
@@ -25,12 +25,14 @@ test_data.columns = ["Number", "National_ID", "Age", "Cell_type", "Register_date
 test_data = test_data.sample(n = 10000)
 train_data = pd.read_excel(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\Prediction_product\Test data\مودم\modem_buyers_info.xlsx")
 
+train_data = pd.read_csv(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\kaggle\Titanic\train.csv")
+test_data = pd.read_csv(r"C:\Users\fafar\OneDrive\Desktop\Desktop\PHD\kaggle\Titanic\test.csv")
 
 
 data = train_data.copy()
 
 #Defining Label and model name
-Label = "Label"
+Label = "Survived"
 
 #Selecting model
 model_name = "RandomForest"
@@ -98,7 +100,7 @@ def classifier_model(data, model_name):
     """
     :param data: The entire training dataset
     :param model_name: The desire model for classification
-    :return: accuracy, model, Encoders, columns_name, Scaler, pca
+    :return: accuracy, precision, recall, f1, confusion_matrix, model, Encoders, columns_name, Scaler
     """
 
     Encoders = {}
@@ -106,7 +108,7 @@ def classifier_model(data, model_name):
         if i != Label:
 
             # Check count of null and distinct values. If a column has alot of null and distinct
-            # value, it should be removed from modeling.
+            # value, it should be removed from modeling. In addition to that ID column should be removed.
 
             null_percentage = data[i].isna().sum() / len(data[i])
             diversification = (len(train_data[i].unique()) + train_data[i].isna().sum())/ len(data[i])
@@ -115,6 +117,9 @@ def classifier_model(data, model_name):
                 del data[i]
 
             elif null_percentage >= 0.5:
+                del data[i]
+
+            elif is_integer_dtype(data[i]) and diversification == 1:
                 del data[i]
 
             else:
@@ -235,9 +240,24 @@ def classifier_model(data, model_name):
 
     # Calculating accuracy for training dataset
     accuracy = accuracy_score(test[Label], predictions)
+    if number_of_classes == 2:
+        precision = precision_score(test[Label], predictions)
+        recall = recall_score(test[Label], predictions)
+        f1 = f1_score(test[Label], predictions)
+    else:
+        precision = np.nan
+        recall = np.nan
+        f1 = np.nan
+
     columns_name = data.drop([Label], axis=1).columns
 
-    return accuracy, model, Encoders, columns_name, Scaler
+
+    test.reset_index(inplace = True, drop=True)
+
+    confusion = confusion_matrix(test[Label], predictions)
+
+
+    return accuracy, precision, recall, f1, confusion, model, Encoders, columns_name, Scaler
 
 
 def classifier_predictor(model, Label, train_data, test_data, Encoders, Scaler, columns_name, model_name):
@@ -325,19 +345,5 @@ def classifier_predictor(model, Label, train_data, test_data, Encoders, Scaler, 
     return predictions_matrix
 
 
-accuracy , model, Encoders, columns_name, Scaler = classifier_model(data, model_name)
+accuracy, precision, recall, f1, confusion, model, Encoders, columns_name, Scaler = classifier_model(data, model_name)
 prediction = classifier_predictor(model, Label, train_data, test_data, Encoders, Scaler, columns_name, model_name)
-
-
-model_list = ["RandomForest",
-              "LogisticRegression",
-              "Xgboost",
-              "LinearSVC",
-              "DeepLearning"]
-
-accuracy_list = []
-for i in model_list:
-    accuracy, model, Encoders, columns_name, Scaler, pca = classifier_model(data, i)
-    accuracy_list.append(accuracy)
-    prediction = classifier_predictor(model, test_data, Encoders, Scaler, pca, columns_name, i)
-
