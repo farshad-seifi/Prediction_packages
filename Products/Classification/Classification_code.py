@@ -347,3 +347,4 @@ def classifier_predictor(model, Label, train_data, test_data, Encoders, Scaler, 
 
 accuracy, precision, recall, f1, confusion, model, Encoders, columns_name, Scaler = classifier_model(data, model_name)
 prediction = classifier_predictor(model, Label, train_data, test_data, Encoders, Scaler, columns_name, model_name)
+print("Finish")
